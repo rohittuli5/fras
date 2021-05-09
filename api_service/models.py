@@ -5,13 +5,15 @@ Models for keeping data in a RDBMS.
 :Authors: Balwinder Sodhi
 """
 
-from peewee import *
-from datetime import datetime as DT
 import logging
+from datetime import datetime as DT
+
 from passlib.handlers.pbkdf2 import pbkdf2_sha256
+from peewee import *
 
 # TODO: Use MariaDB or Postgres
 db = SqliteDatabase('fras_data.db')
+
 
 def create_schema():
     logging.info("Creating DB schema")
@@ -23,11 +25,11 @@ def create_schema():
 def populate_sample_data():
     with db:
         u = User(login_id="test", password_hashed=pbkdf2_sha256.hash("test"), role="ST",
-        email="s1@junk.ss", first_name="TEST", last_name="USER", inst_id="CSB1000")
+                 email="s1@junk.ss", first_name="TEST", last_name="USER", inst_id="CSB1000")
         u.save()
 
         u = User(login_id="admin", password_hashed=pbkdf2_sha256.hash("admin"), role="SU",
-        email="admin@admin.ss", first_name="ADMIN", last_name="USER", inst_id="CSB1001")
+                 email="admin@admin.ss", first_name="ADMIN", last_name="USER", inst_id="CSB1001")
         u.save()
 
 
@@ -62,6 +64,7 @@ class User(BaseModel):
         ("SU", 'Superuser'),
     ]
     role = CharField(choices=ROLES, default="GN")
+
     def get_role_label(self):
         return dict(self.ROLES)[self.role]
 

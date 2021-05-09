@@ -7,35 +7,46 @@ library for all face recognition tasks.
 
 :Authors: Balwinder Sodhi
 """
-import face_recognition as fr
-import numpy as np
-import glob
-import os
-import cv2
 import argparse
 import base64
+import glob
 import io
 import logging
+import os
+
+import cv2
+import face_recognition as fr
+import numpy as np
 
 
-def get_face_encoding(image_bytes):
-    f = io.BytesIO(image_bytes)
-    image = fr.load_image_file(f)
-    fenc = fr.face_encodings(image)
-    fc = len(fenc)
-    if fc != 1:
-        raise Exception("Found {0} faces in photo. Expected only 1.".format(fc))
-    return fenc[0]
+def get_face_encoding(image_bytes, b64=False):
+    if image_bytes:
+        curr_file = None
+        if b64:
+            curr_file = base64.b64decode(image_bytes)
+        else:
+            curr_file = io.BytesIO(image_bytes)
+        image = fr.load_image_file(curr_file)
+        if image.size == 0:
+            raise Exception("Image could not be loaded")
+        face_encoding = fr.face_encodings(image)
+        if len(face_encoding) != 1:
+            raise Exception("Found {0} faces in photo. Expected only 1.".format(len(face_encoding)))
+        return face_encoding[0]
+    else:
+        raise Exception("No image found/ curropted format")
 
 
 def get_face_encoding_b64(image_b64):
     img_data = base64.b64decode(image_b64)
     image = fr.load_image_file(io.BytesIO(img_data))
-    fenc = fr.face_encodings(image)
-    fc = len(fenc)
+    if image.size == 0:
+        raise Exception("Image could not be loaded")
+    face_encoding = fr.face_encodings(image)
+    fc = len(face_encoding)
     if fc != 1:
         raise Exception("Found {0} faces in photo. Expected only 1.".format(fc))
-    return fenc[0]
+    return face_encoding[0]
 
 
 def get_known_faces(images_glob):
@@ -54,14 +65,22 @@ def get_known_faces(images_glob):
     file_paths = glob.glob(images_glob)
     known_faces = []
     known_names = []
-    for f in file_paths:
-        image = fr.load_image_file(f)
-        fenc = fr.face_encodings(image)
-        if fenc:
-            known_faces.append(fenc[0])
-            known_names.append(os.path.basename(f))
-        else:
-            print("Face encoding could not be obtained for {0}".format(f))
+    if len(file_paths) == 0:
+        raise Exception("No files provided")
+    for curr_file in file_paths:
+        image = fr.load_image_file(curr_file)
+        if image.size == 0:
+            raise Exception("Image could not be loaded")
+        face_encoding = fr.face_encodings(image)
+        if face_encoding and len(face_encoding) == 1:
+            known_faces.append(face_encoding[0])
+            known_names.append(os.path.basename(curr_file))
+
+        elif face_encoding == None:
+            print("Face encoding could not be obtained for {0}".format(curr_file))
+        elif len(face_encoding) != 1:
+            print("{0} has more than 1 faces".format(curr_file))
+
     return known_faces, known_names
 
 
@@ -77,7 +96,8 @@ def get_faces_from_photo(group_photo_path):
         second item is the list of locations of those faces in the photo.
     """
     image = fr.load_image_file(group_photo_path)
-    # return fr.face_encodings(image)
+    if image.size == 0:
+        raise Exception("Image could not be loaded")
     face_loc = fr.face_locations(image)
     face_enc = fr.face_encodings(image, known_face_locations=face_loc)
     return face_enc, face_loc
@@ -99,7 +119,10 @@ def is_person_in_photo(person_photo_path, group_photo_path, tolerance=0.45):
         True if found, else False
     """
     grp_faces, face_loc = get_faces_from_photo(group_photo_path)
-    face = get_faces_from_photo(person_photo_path)[0]
+    faces_list = get_faces_from_photo(person_photo_path)
+    if (len(faces_list) != 1):
+        raise Exception("Person's photo has more than one face")
+    face = faces_list[0]
     matches = fr.compare_faces(grp_faces, face, tolerance=tolerance)
     return True in matches
 
@@ -128,7 +151,7 @@ def find_persons_in_photo(group_photo_path, known_faces_data, tolerance=0.48):
         kf_encs, kn_names = get_known_faces(known_faces_data)
     else:
         kf_encs, kn_names = known_faces_data
-    
+
     logging.debug("Known faces: {0}".format(str(kn_names)))
     grp_face_encs, face_loc = get_faces_from_photo(group_photo_path)
 
@@ -149,18 +172,19 @@ def find_persons_in_photo(group_photo_path, known_faces_data, tolerance=0.48):
                 names_missing.append(kn_names[idx])
     else:
         logging.debug("Could not find faces from group photo!")
-    
+
     fcount = len(grp_face_encs)
     logging.debug("Found {} faces in the group photo.".format(fcount))
     image = fr.load_image_file(group_photo_path)
+    if image.size == 0:
+        raise Exception("Image could not be loaded")
     im_b64 = mark_faces(image, face_locs_found)
     res = {"names_found": names_found, "names_missing": names_missing,
-            "fcount": fcount, "im_b64": im_b64}
+           "fcount": fcount, "im_b64": im_b64}
     return res
 
 
 def mark_faces(image, face_loc):
-    
     for idx, (top, right, bottom, left) in enumerate(face_loc):
         try:
             # Draw a box around the face
@@ -168,30 +192,29 @@ def mark_faces(image, face_loc):
 
             # Draw a label with a name below the face
             # cv2.rectangle(image, (left, bottom - 35),
-                        # (right, bottom), (0, 0, 255), cv2.FILLED)
+            # (right, bottom), (0, 0, 255), cv2.FILLED)
             font = cv2.FONT_HERSHEY_DUPLEX
-            cv2.putText(image, str(idx+1), (left - 15, bottom + 30),
+            cv2.putText(image, str(idx + 1), (left - 15, bottom + 30),
                         font, 1.0, (0, 0, 255), 2)
             logging.debug("Marked the face {}".format(idx))
         except Exception as ex:
+            logging.exception(str(ex))
             logging.exception("Failed to mark the face. Continuing to next.")
-    
+
     is_success, im_buf_arr = cv2.imencode(".jpg", image)
     if is_success:
         byte_im = im_buf_arr.tobytes()
-        img_data = "{0}{1}".format("data:image/jpeg;base64,", 
-            base64.b64encode(byte_im).decode())
+        img_data = "{0}{1}".format("data:image/jpeg;base64,",
+                                   base64.b64encode(byte_im).decode())
         logging.debug("Group photo serialized to text.")
         return img_data
     else:
         logging.error("Failed to encode the group photo as .jpg format. Sendng unmarked.")
-        img_data = "{0}{1}".format("data:image/jpeg;base64,", 
-            base64.b64encode(image).decode())
-    
+        img_data = "{0}{1}".format("data:image/jpeg;base64,",
+                                   base64.b64encode(image).decode())
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument("known_faces_glob", type=str,
                         help="GLOB pattern for .jpg files of known faces.")

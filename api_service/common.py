@@ -6,15 +6,17 @@ Common functions that are used by other modules.
 """
 
 import logging
-from flask import (Flask, redirect, session, url_for, flash)
-from datetime import datetime as DT
-from functools import wraps
 import random
 import string
-from playhouse.shortcuts import *
+from datetime import datetime as DT
+from functools import wraps
+
+from flask import (redirect, session, url_for, flash)
 from models import db
+from playhouse.shortcuts import *
 
 TS_FORMAT = "%Y%m%d_%H%M%S"
+
 
 def inject_user():
     if "user" in session:
@@ -23,6 +25,7 @@ def inject_user():
     else:
         logging.info("User not found in session!")
         return dict()
+
 
 def auth_check(_func=None, *, roles=None):
     def decor_auth(func):
@@ -33,7 +36,7 @@ def auth_check(_func=None, *, roles=None):
                 logging.warning(msg)
                 flash(msg)
                 return redirect(url_for('login view'))
-            
+
             user_role = session["user"]["role"]
             print("User role: {}".format(user_role))
             if roles and (user_role not in roles):
@@ -42,6 +45,7 @@ def auth_check(_func=None, *, roles=None):
                 flash(msg)
                 return redirect(url_for('login view'))
             return func(*args, **kwargs)
+
         return wrapper_auth
 
     if _func is None:
@@ -50,14 +54,15 @@ def auth_check(_func=None, *, roles=None):
         return decor_auth(_func)
 
 
-def jinja2_filter_datefmt(dt, fmt=None):
-    if not fmt:
-        fmt = TS_FORMAT
-    if isinstance(dt, str):
-        dt = DT.strptime(dt, fmt)
-    nat_dt = dt.replace(tzinfo=None)
+def filter_date_using_format(date_time, given_format=None):
+    if not given_format:
+        given_format = TS_FORMAT
+    if isinstance(date_time, str):
+        date_time = DT.strptime(date_time, given_format)
+    nat_dt = date_time.replace(tzinfo=None)
     to_fmt = '%d-%m-%Y@%I:%M:%S %p'
     return nat_dt.strftime(to_fmt)
+    
 
 
 def get_ts_str():
@@ -65,7 +70,9 @@ def get_ts_str():
 
 
 def random_str(size=10):
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=size))
+    char_choices = string.ascii_uppercase + string.digits
+    random_char_list = random.choices(char_choices, k=size)
+    return ''.join(random_char_list)
 
 
 def merge_form_to_model(mod, frm):

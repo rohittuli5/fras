@@ -5,25 +5,25 @@ web application.
 
 :Authors: Balwinder Sodhi
 """
-from flask import current_app as app
-from flask import (Flask, jsonify, request, session)
-from flask.blueprints import Blueprint
-from werkzeug.utils import secure_filename
-from passlib.hash import pbkdf2_sha256
-from common import *
-from models import *
-from playhouse.shortcuts import *
-from datetime import datetime as DT
-
-import logging
-import json
-import os
+import base64
 import csv
+import json
+import logging
+import os
+from datetime import datetime as DT
 from pathlib import Path
 from zipfile import ZipFile
-import base64
+
 import frecapi as fapi
 import numpy as np
+from common import *
+from flask import current_app as app
+from flask import (jsonify, request, session)
+from flask.blueprints import Blueprint
+from models import *
+from passlib.hash import pbkdf2_sha256
+from playhouse.shortcuts import *
+from werkzeug.utils import secure_filename
 
 logger = logging.getLogger('peewee')
 logger.addHandler(logging.StreamHandler())
@@ -153,6 +153,7 @@ def signup():
                      last_name=request.form.get('last_name'),
                      password_hashed=pw_hashed)
             # TODO: Validate user
+            
             u.save()
             return _ok_json("User created. Please login with your credentials.")
         else:
@@ -182,7 +183,8 @@ def login():
             return _error_json("Invalid user/password.")
         else:
             user_obj = {"id": u.id, "login_id": login_id,
-                        "name": "{0} {1}".format(u.first_name, u.last_name), "role_name": u.get_role_label(), "role": u.role}
+                        "name": "{0} {1}".format(u.first_name, u.last_name), "role_name": u.get_role_label(),
+                        "role": u.role}
             session['user'] = user_obj
             nav = _make_nav(u.role)
             return _ok_json({"user": user_obj, "nav": nav})
@@ -258,7 +260,7 @@ def _process_photos_zip(zip_file):
                 zip_file, len(zitems)))
             for zn in zitems:
                 try:
-                    logging.debug("Extracting JPG from ZIP entry: "+str(zn))
+                    logging.debug("Extracting JPG from ZIP entry: " + str(zn))
                     with myzip.open(zn) as zf:
                         logging.debug("Processing ZIP entry: {}".format(zn))
                         photo = zf.read()
@@ -279,10 +281,10 @@ def _process_photos_zip(zip_file):
                         _save_entity(kf)
                         recs += 1
                 except Exception as ex:
-                    logging.exception("Error when processing photo. "+str(ex))
+                    logging.exception("Error when processing photo. " + str(ex))
 
     except Exception as ex:
-        logging.exception("Error when processing ZIP file. "+str(ex))
+        logging.exception("Error when processing ZIP file. " + str(ex))
     return recs
 
 
@@ -363,6 +365,8 @@ def kface_save():
         if sid:
             kf = KnownFace.get_by_id(sid)
             # TODO: Check ownership
+            if kf.user !=logged_in_user() and not _is_user_in_role("SU"):
+                return _error_json("Ownership error")
             merge_form_to_model(kf, fd)
             kf.face_enc = _np_to_json(face_enc)
             with db.transaction() as txn:
@@ -448,8 +452,8 @@ def all_attendance():
     try:
         att = Attendance.select()
         return _ok_json([{"first_name": a.user.first_name,
-                         "last_name": a.user.last_name,
-                         "marked_on": a.ins_ts} for a in att])
+                          "last_name": a.user.last_name,
+                          "marked_on": a.ins_ts} for a in att])
     except Exception as ex:
         msg = "Error when fetching attendance."
         logging.exception(msg)
